@@ -1,0 +1,29 @@
+{
+  "name": "tickettotest-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "TicketToTest CLI - Generate Playwright and Robot Framework tests from ticket descriptions",
+  "main": "dist/index.js",
+  "bin": {
+    "ttt": "./bin/ttt.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node bin/ttt.js",
+    "dev": "tsc && node bin/ttt.js"
+  },
+  "keywords": ["testing", "playwright", "robot-framework", "cli"],
+  "author": "Raimo Dahl",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "commander": "^12.0.0",
+    "dotenv": "^16.3.1",
+    "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  }
+}

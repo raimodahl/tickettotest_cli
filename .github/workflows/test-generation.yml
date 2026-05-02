@@ -1,0 +1,193 @@
+# =============================================================================
+# TicketToTest CLI - Automated Test Generation Workflow
+# =============================================================================
+#
+# This workflow generates test files from Jira ticket descriptions using
+# the TicketToTest CLI tool. It creates a Pull Request with the generated tests.
+#
+# SETUP REQUIREMENTS:
+# -------------------
+# 1. Add your TicketToTest license key as a GitHub Secret:
+#    - Go to: Repository Settings > Secrets and variables > Actions
+#    - Click "New repository secret"
+#    - Name: TICKETTEST_LICENSE_KEY
+#    - Value: Your license key from https://tickettotest.com
+#
+# 2. Ensure your project has a tests directory (or specify via project_path input)
+#
+# =============================================================================
+
+name: Generate Tests
+
+on:
+  # Trigger on push to feature branches
+  push:
+    branches: [feature/*]
+
+  # Allow manual trigger with inputs
+  workflow_dispatch:
+    inputs:
+      ticket_id:
+        description: 'Jira Ticket ID (e.g., PROJ-123)'
+        required: true
+        type: string
+      project_path:
+        description: 'Path to tests directory (default: ./tests)'
+        required: false
+        type: string
+        default: './tests'
+      license_key:
+        description: 'License key (leave empty to use secret)'
+        required: false
+        type: string
+
+jobs:
+  generate-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Extract ticket ID from commit message if not provided via dispatch
+      # Supports patterns like: [PROJ-123], PROJ-123, or JIRA-123
+      - name: Extract ticket ID from commit
+        id: extract-ticket
+        run: |
+          if [ -n "${{ github.event.inputs.ticket_id }}" ]; then
+            echo "ticket_id=${{ github.event.inputs.ticket_id }}" >> $GITHUB_OUTPUT
+          else
+            TICKET_ID=$(echo "${{ github.event.head_commit.message }}" | grep -oE '\[?[A-Z]+-[0-9]+\]?' | head -1 | tr -d '[]')
+            if [ -z "$TICKET_ID" ]; then
+              echo "No ticket ID found in commit message"
+              exit 1
+            fi
+            echo "ticket_id=$TICKET_ID" >> $GITHUB_OUTPUT
+          fi
+
+      # Determine which CLI to use
+      # Uses local CLI if available (after build), otherwise falls back to npx
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check for local CLI
+        id: cli-check
+        run: |
+          if [ -f "./bin/ttt.js" ]; then
+            echo "cli=local" >> $GITHUB_OUTPUT
+          else
+            echo "cli=npx" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install dependencies and build
+        if: steps.cli-check.outputs.cli == 'local'
+        run: |
+          npm ci
+          npm run build
+
+      # Generate tests using TicketToTest CLI
+      - name: Generate tests for ticket
+        id: generate
+        run: |
+          LICENSE_KEY="${{ github.event.inputs.license_key || secrets.TICKETTEST_LICENSE_KEY }}"
+          PROJECT_PATH="${{ github.event.inputs.project_path || './tests' }}"
+
+          if [ -z "$LICENSE_KEY" ]; then
+            echo "Error: No license key provided. Set TICKETTEST_LICENSE_KEY secret or provide license_key input."
+            exit 1
+          fi
+
+          echo "Generating tests for ${{ steps.extract-ticket.outputs.ticket_id }}..."
+
+          if [ "${{ steps.cli-check.outputs.cli }}" == "local" ]; then
+            npx tickettotest generate ${{ steps.extract-ticket.outputs.ticket_id }} \
+              --framework playwright \
+              --output-dir "$PROJECT_PATH"
+          else
+            npx tickettotest generate ${{ steps.extract-ticket.outputs.ticket_id }} \
+              --framework playwright \
+              --output-dir "$PROJECT_PATH"
+          fi
+        env:
+          TICKETTEST_LICENSE_KEY: ${{ github.event.inputs.license_key || secrets.TICKETTEST_LICENSE_KEY }}
+
+      # Check if any tests were generated
+      - name: Check for generated tests
+        id: check-tests
+        run: |
+          PROJECT_PATH="${{ github.event.inputs.project_path || './tests' }}"
+          if [ -z "$(find "$PROJECT_PATH" -name "*.spec.ts" -o -name "*.test.ts" 2>/dev/null)" ]; then
+            echo "no_tests=true" >> $GITHUB_OUTPUT
+          else
+            echo "no_tests=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Create a branch for the generated tests
+      - name: Create branch for tests
+        if: steps.check-tests.outputs.no_tests != 'true'
+        run: |
+          git checkout -b tests/generated-${{ steps.extract-ticket.outputs.ticket_id }}
+
+      # Configure git
+      - name: Configure git
+        if: steps.check-tests.outputs.no_tests != 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      # Commit generated tests
+      - name: Commit generated tests
+        if: steps.check-tests.outputs.no_tests != 'true'
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "feat: add generated tests for ${{ steps.extract-ticket.outputs.ticket_id }}"
+          fi
+
+      # Push branch and create PR
+      - name: Create Pull Request
+        if: steps.check-tests.outputs.no_tests != 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          title: "Generated tests for ${{ steps.extract-ticket.outputs.ticket_id }}"
+          body: |
+            ## Generated Tests
+
+            Tests automatically generated for ticket **${{ steps.extract-ticket.outputs.ticket_id }}** using TicketToTest CLI.
+
+            ### Changes
+            - Generated Playwright test files for the ticket
+            - Tests saved to: ${{ github.event.inputs.project_path || './tests' }}
+
+            ### Review Checklist
+            - [ ] Review generated test assertions
+            - [ ] Verify selectors match your application
+            - [ ] Add any additional test cases needed
+            - [ ] Run tests locally to verify they pass
+
+            ---
+            *This PR was automatically generated by the TicketToTest GitHub Actions workflow.*
+          branch: tests/generated-${{ steps.extract-ticket.outputs.ticket_id }}
+          delete-branch: true
+          base: main
+
+      # Handle case when no tests were generated
+      - name: No tests generated
+        if: steps.check-tests.outputs.no_tests == 'true'
+        run: |
+          echo "No tests were generated for ticket ${{ steps.extract-ticket.outputs.ticket_id }}"
+          echo "This may happen if:"
+          echo "  - The ticket does not contain enough information to generate tests"
+          echo "  - The license key is invalid or expired"
+          echo "  - The API is temporarily unavailable"
+          echo ""
+          echo "Please check the ticket content and try again manually."
+          exit 1

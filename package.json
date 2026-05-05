@@ -1,5 +1,5 @@
 {
-  "name": "tickettotest-cli",
+  "name": "tickettotest",
   "version": "0.1.1",
   "type": "module",
   "description": "TicketToTest CLI - Generate Playwright and Robot Framework tests from ticket descriptions",
@@ -12,7 +12,12 @@
     "start": "node bin/ttt.js",
     "dev": "tsc && node bin/ttt.js"
   },
-  "keywords": ["testing", "playwright", "robot-framework", "cli"],
+  "keywords": [
+    "testing",
+    "playwright",
+    "robot-framework",
+    "cli"
+  ],
   "author": "Raimo Dahl",
   "license": "MIT",
   "dependencies": {

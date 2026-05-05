@@ -7,19 +7,19 @@ interface GenerateOptions {
   ticketId?: string;
   description?: string;
   language: string;
-  framework: 'playwright' | 'robot' | 'cypress' | 'selenium';
+  framework?: 'playwright' | 'robot' | 'cypress' | 'selenium';
   output?: string;
   url: string;
   apiKey?: string;
 }
 
-async function loadApiKeyFromConfig(): Promise<string | undefined> {
+async function loadLicenseKeyFromConfig(): Promise<string | undefined> {
   const configPath = path.join(os.homedir(), '.tickettotest', 'config.json');
   try {
     if (await fs.pathExists(configPath)) {
       const content = await fs.readFile(configPath, 'utf-8');
       const config = JSON.parse(content);
-      return config.apiKey;
+      return config.license_key;
     }
   } catch (error) {
     // Ignore errors reading config file - fall back to no auth
@@ -30,13 +30,16 @@ async function loadApiKeyFromConfig(): Promise<string | undefined> {
 export async function generate(options: GenerateOptions): Promise<void> {
   let { ticketId, description, language, framework, output, url, apiKey } = options;
 
-  // Auto-load API key from config file if not provided
+  // Auto-load license key from config file if not provided
   if (!apiKey) {
-    const configApiKey = await loadApiKeyFromConfig();
-    if (configApiKey) {
-      apiKey = configApiKey;
+    const configLicenseKey = await loadLicenseKeyFromConfig();
+    if (configLicenseKey) {
+      apiKey = configLicenseKey;
     }
   }
+
+  // Default framework to playwright
+  const actualFramework = framework || 'playwright';
 
   // Validate mutually exclusive ticket ID and description
   if (!ticketId && !description) {
@@ -49,7 +52,7 @@ export async function generate(options: GenerateOptions): Promise<void> {
   // Build API request
   const requestData: Record<string, unknown> = {
     language,
-    framework,
+    framework: actualFramework,
   };
   if (ticketId) {
     requestData.ticketId = ticketId;
@@ -57,20 +60,21 @@ export async function generate(options: GenerateOptions): Promise<void> {
     requestData.description = description;
   }
 
-  console.log(`Generating ${framework} tests...`);
+  console.log(`Generating ${actualFramework} tests...`);
   console.log(`Language: ${language}`);
   console.log(`Source: ${ticketId ? `Ticket ID: ${ticketId}` : 'Description'}`);
 
   try {
-    // Call the API
+    // Call the API with x-license-key header
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     if (apiKey) {
-      headers['Authorization'] = `Bearer ${apiKey}`;
+      headers['x-license-key'] = apiKey;
     }
 
     const response = await axios.post(`${url}/generate`, requestData, { headers });
+
     if (response.status !== 200) {
       throw new Error(`API returned status ${response.status}`);
     }
@@ -79,21 +83,21 @@ export async function generate(options: GenerateOptions): Promise<void> {
     const generatedLanguage = response.data.language as string;
     const generatedFramework = response.data.framework as string;
 
-    // Determine output file extension
+    // Determine output file extension based on framework
     let extension: string;
-    if (generatedFramework === 'robot') {
+    if (actualFramework === 'robot') {
       extension = '.robot';
-    } else if (generatedFramework === 'cypress') {
+    } else if (actualFramework === 'cypress') {
       extension = '.cy.ts';
-    } else if (generatedFramework === 'selenium') {
-      extension = getExtensionForLanguage(generatedLanguage);
+    } else if (actualFramework === 'selenium') {
+      extension = '.java';
     } else {
-      // Playwright - infer from language
-      extension = getExtensionForLanguage(generatedLanguage);
+      // Playwright (default)
+      extension = '.spec.ts';
     }
 
     // Determine output path
-    const outputPath = output || generateDefaultPath(ticketId, generatedFramework, extension);
+    const outputPath = output || generateDefaultPath(ticketId, actualFramework, extension);
 
     // Save the generated code
     await fs.ensureDir(path.dirname(outputPath));
@@ -103,14 +107,21 @@ export async function generate(options: GenerateOptions): Promise<void> {
     console.log(`Framework: ${generatedFramework}`);
     console.log(`Language: ${generatedLanguage}`);
     console.log(`Lines: ${generatedCode.split('\n').length}`);
+
+    // Show run command
+    const runCmd = actualFramework === 'robot' ? 'robot tests/'
+               : actualFramework === 'cypress' ? 'npx cypress run'
+               : actualFramework === 'selenium' ? 'mvn test'
+               : 'npx playwright test';
+    console.log(`\nRun tests: ${runCmd}`);
+
   } catch (error) {
     if (axios.isAxiosError(error)) {
       if (error.response) {
-        // Server responded with error status
         const status = error.response.status;
         const data = error.response.data;
         if (status === 401) {
-          throw new Error('Authentication failed. Please provide a valid API key with --api-key');
+          throw new Error('Authentication failed. Please provide a valid license key with --api-key or configure via "ttt init"');
         } else if (status === 404) {
           throw new Error(`Ticket not found: ${ticketId}`);
         } else if (status === 422) {
@@ -119,7 +130,6 @@ export async function generate(options: GenerateOptions): Promise<void> {
           throw new Error(`API error (${status}): ${JSON.stringify(data)}`);
         }
       } else if (error.request) {
-        // Request made but no response received
         throw new Error(`Could not connect to API at ${url}. Please check the URL.`);
       }
     }
@@ -127,22 +137,10 @@ export async function generate(options: GenerateOptions): Promise<void> {
   }
 }
 
-function getExtensionForLanguage(language: string): string {
-  const extensions: Record<string, string> = {
-    typescript: '.ts',
-    javascript: '.js',
-    python: '.py',
-    java: '.java',
-    csharp: '.cs',
-    go: '.go',
-  };
-  return extensions[language.toLowerCase()] || '.txt';
-}
-
 function generateDefaultPath(ticketId: string | undefined, framework: string, extension: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const prefix = ticketId ? `ticket-${ticketId}` : `test-${timestamp}`;
-  const folder = framework === 'robot' ? 'robot-tests' 
+  const folder = framework === 'robot' ? 'robot-tests'
                : framework === 'cypress' ? 'cypress-tests'
                : framework === 'selenium' ? 'selenium-tests'
                : 'playwright-tests';

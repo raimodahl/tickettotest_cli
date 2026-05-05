@@ -32,7 +32,7 @@ ttt generate --description "Käyttäjä voi kirjautua sisään" --framework play
 | `--framework` | `-f` | Testausframework | `playwright` |
 | `--output` | `-o` | Tulostepolku | auto |
 | `--url` | `-u` | API URL | `https://api.tickettotest.com` |
-| `--api-key` | `-k` | API-avain | ympäristömuuttujasta |
+| `--api-key` | `-k` | API-avain | config-tiedostosta ~/.tickettotest/config.json |
 
 ## Framework-valinnat
 

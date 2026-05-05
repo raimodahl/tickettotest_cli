@@ -1,6 +1,6 @@
 {
   "name": "tickettotest",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "TicketToTest CLI - Generate Playwright and Robot Framework tests from ticket descriptions",
   "main": "dist/index.js",

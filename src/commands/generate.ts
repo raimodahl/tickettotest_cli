@@ -1,6 +1,7 @@
 import axios from 'axios';
 import fs from 'fs-extra';
 import path from 'path';
+import os from 'os';
 
 interface GenerateOptions {
   ticketId?: string;
@@ -12,8 +13,30 @@ interface GenerateOptions {
   apiKey?: string;
 }
 
+async function loadApiKeyFromConfig(): Promise<string | undefined> {
+  const configPath = path.join(os.homedir(), '.tickettotest', 'config.json');
+  try {
+    if (await fs.pathExists(configPath)) {
+      const content = await fs.readFile(configPath, 'utf-8');
+      const config = JSON.parse(content);
+      return config.apiKey;
+    }
+  } catch (error) {
+    // Ignore errors reading config file - fall back to no auth
+  }
+  return undefined;
+}
+
 export async function generate(options: GenerateOptions): Promise<void> {
-  const { ticketId, description, language, framework, output, url, apiKey } = options;
+  let { ticketId, description, language, framework, output, url, apiKey } = options;
+
+  // Auto-load API key from config file if not provided
+  if (!apiKey) {
+    const configApiKey = await loadApiKeyFromConfig();
+    if (configApiKey) {
+      apiKey = configApiKey;
+    }
+  }
 
   // Validate mutually exclusive ticket ID and description
   if (!ticketId && !description) {
@@ -28,7 +51,6 @@ export async function generate(options: GenerateOptions): Promise<void> {
     language,
     framework,
   };
-
   if (ticketId) {
     requestData.ticketId = ticketId;
   } else {
@@ -49,7 +71,6 @@ export async function generate(options: GenerateOptions): Promise<void> {
     }
 
     const response = await axios.post(`${url}/generate`, requestData, { headers });
-
     if (response.status !== 200) {
       throw new Error(`API returned status ${response.status}`);
     }
@@ -82,7 +103,6 @@ export async function generate(options: GenerateOptions): Promise<void> {
     console.log(`Framework: ${generatedFramework}`);
     console.log(`Language: ${generatedLanguage}`);
     console.log(`Lines: ${generatedCode.split('\n').length}`);
-
   } catch (error) {
     if (axios.isAxiosError(error)) {
       if (error.response) {

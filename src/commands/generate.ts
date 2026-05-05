@@ -6,8 +6,9 @@ interface GenerateOptions {
   ticketId?: string;
   description?: string;
   language: string;
-  framework: 'playwright' | 'robot';
+  framework?: string;
   output?: string;
+  dryRun?: boolean;
   url: string;
   apiKey?: string;
 }
@@ -26,7 +27,7 @@ export async function generate(options: GenerateOptions): Promise<void> {
   // Build API request
   const requestData: Record<string, unknown> = {
     language,
-    framework,
+    framework: options.framework || "playwright",
   };
 
   if (ticketId) {
@@ -58,17 +59,13 @@ export async function generate(options: GenerateOptions): Promise<void> {
     const generatedLanguage = response.data.language as string;
     const generatedFramework = response.data.framework as string;
 
-    // Determine output file extension
-    let extension: string;
-    if (generatedFramework === 'robot') {
-      extension = '.robot';
-    } else {
-      // Playwright - infer from language
-      extension = getExtensionForLanguage(generatedLanguage);
-    }
+    const ext = options.framework === "robot" ? ".robot"
+             : options.framework === "cypress" ? ".cy.ts"
+             : options.framework === "selenium" ? ".java"
+             : ".spec.ts";
 
     // Determine output path
-    const outputPath = output || generateDefaultPath(ticketId, generatedFramework, extension);
+    const outputPath = output || generateDefaultPath(ticketId, generatedFramework, ext);
 
     // Save the generated code
     await fs.ensureDir(path.dirname(outputPath));
@@ -78,6 +75,12 @@ export async function generate(options: GenerateOptions): Promise<void> {
     console.log(`Framework: ${generatedFramework}`);
     console.log(`Language: ${generatedLanguage}`);
     console.log(`Lines: ${generatedCode.split('\n').length}`);
+
+    const runCmd = options.framework === "robot" ? "robot tests/"
+               : options.framework === "cypress" ? "npx cypress run"
+               : options.framework === "selenium" ? "mvn test"
+               : "npx playwright test";
+    console.log(`\nRun tests: ${runCmd}`);
 
   } catch (error) {
     if (axios.isAxiosError(error)) {

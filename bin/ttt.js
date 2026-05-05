@@ -16,7 +16,7 @@ program
   .option('-t, --ticket-id <id>', 'Ticket ID to generate tests from')
   .option('-d, --description <text>', 'Ticket description text (mutually exclusive with --ticket-id)')
   .option('-l, --language <lang>', 'Programming language for generated tests', 'typescript')
-  .option('-f, --framework <framework>', 'Test framework to generate for (playwright|robot)', 'playwright')
+  .option('-f, --framework <framework>', 'Test framework: playwright|robot|cypress|selenium', 'playwright')
   .option('-o, --output <path>', 'Output file path (auto-detected from framework if not provided)')
   .option('-u, --url <url>', 'TicketToTest API URL', 'https://api.tickettotest.com')
   .option('-k, --api-key <key>', 'API key for authentication')

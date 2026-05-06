@@ -73,9 +73,8 @@ export async function generateCommand(ticketId, options) {
         jiraSpinner.fail(chalk.red(`Jira fetch failed: ${err.message}`));
         process.exit(1);
     }
-    // 2. Generate test via TicketToTest API
-    const framework = options.framework || "playwright";
-    const genSpinner = ora(`Claude AI is generating your ${framework} test...`).start();
+    // 2. Generate Playwright test via TicketToTest API
+    const genSpinner = ora("Claude AI is generating your Playwright test...").start();
     try {
         const res = await fetch(`${config.api_url}/generate`, {
             method: "POST",
@@ -87,7 +86,6 @@ export async function generateCommand(ticketId, options) {
                 ticket_id: ticket.id,
                 title: ticket.title,
                 description: ticket.description,
-                framework,
             }),
         });
         const data = await res.json();
@@ -104,7 +102,7 @@ export async function generateCommand(ticketId, options) {
             .replace(/```$/, "")
             .trim();
         const lineCount = code.split("\n").length;
-        genSpinner.succeed(chalk.green(`Test generated! (${lineCount} lines)`));
+        genSpinner.succeed(chalk.green(`Test generated! (${lineCount} lines of TypeScript)`));
         // 3a. --dry-run: print to console
         if (options.dryRun) {
             console.log(chalk.gray("\n─────────────────────────────────────────"));
@@ -119,12 +117,8 @@ export async function generateCommand(ticketId, options) {
             const filepath = join(options.output, data.filename);
             writeFileSync(filepath, code, "utf-8");
             console.log(chalk.green(`\n✓ Saved: ${chalk.bold(filepath)}`));
-            const runCmd = framework === "robot" ? "robot tests/"
-                : framework === "cypress" ? "npx cypress run"
-                : framework === "selenium" ? "mvn test"
-                : "npx playwright test";
             console.log(chalk.cyan("\nRun your test:\n") +
-                chalk.bold(`  ${runCmd} ${filepath}\n`));
+                chalk.bold(`  npx playwright test ${filepath}\n`));
         }
         // 4. Show remaining quota
         const remaining = data.quota_remaining;

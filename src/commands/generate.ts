@@ -88,6 +88,7 @@ export async function generateCommand(ticketId, options) {
                 title: ticket.title,
                 description: ticket.description,
                 framework,
+                project_path: options.output,
             }),
         });
         const data = await res.json();
@@ -119,6 +120,14 @@ export async function generateCommand(ticketId, options) {
             const filepath = join(options.output, data.filename);
             writeFileSync(filepath, code, "utf-8");
             console.log(chalk.green(`\n✓ Saved: ${chalk.bold(filepath)}`));
+            // 4. Show duplicate warnings if any
+            if (data.existing_tests_warning && data.existing_tests_warning.length > 0) {
+                console.log(chalk.yellow(`\n⚠ Possible duplicate tests detected:`));
+                for (const warning of data.existing_tests_warning) {
+                    console.log(chalk.yellow(`  → ${warning}`));
+                }
+                console.log(chalk.gray(`  Review your existing tests before running.\n`));
+            }
             const runCmd = framework === "robot" ? "robot tests/"
                 : framework === "cypress" ? "npx cypress run"
                 : framework === "selenium" ? "mvn test"

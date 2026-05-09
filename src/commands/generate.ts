@@ -1,10 +1,39 @@
-// @ts-nocheck
 import chalk from "chalk";
 import ora from "ora";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { loadConfig } from "../config.js";
-async function fetchJiraTicket(ticketId, jiraUrl, email, token) {
+
+interface JiraField {
+    summary: string;
+    description: unknown;
+}
+
+interface JiraIssue {
+    fields: JiraField;
+}
+
+interface JiraTicket {
+    id: string;
+    title: string;
+    description: string;
+}
+
+interface GenerateResponse {
+    code: string;
+    filename: string;
+    existing_tests_warning?: string[];
+    quota_remaining: number;
+    error?: string;
+    message?: string;
+}
+
+async function fetchJiraTicket(
+    ticketId: string,
+    jiraUrl: string,
+    email: string,
+    token: string
+): Promise<JiraTicket> {
     const auth = Buffer.from(`${email}:${token}`).toString("base64");
     const url = `${jiraUrl}/rest/api/3/issue/${ticketId}`;
     const res = await fetch(url, {
@@ -14,13 +43,11 @@ async function fetchJiraTicket(ticketId, jiraUrl, email, token) {
         },
     });
     if (!res.ok) {
-        if (res.status === 404)
-            throw new Error(`Ticket ${ticketId} not found`);
-        if (res.status === 401)
-            throw new Error("Invalid Jira credentials");
+        if (res.status === 404) throw new Error(`Ticket ${ticketId} not found`);
+        if (res.status === 401) throw new Error("Invalid Jira credentials");
         throw new Error(`Jira API error: ${res.status}`);
     }
-    const data = await res.json();
+    const data = (await res.json()) as JiraIssue;
     const description = extractTextFromADF(data.fields.description);
     return {
         id: ticketId,
@@ -28,25 +55,21 @@ async function fetchJiraTicket(ticketId, jiraUrl, email, token) {
         description,
     };
 }
-// Convert Jira ADF format to plain text
-function extractTextFromADF(adf) {
-    if (!adf)
-        return "";
-    if (typeof adf === "string")
-        return adf;
-    const lines = [];
-    function walk(node) {
-        if (!node)
-            return;
-        if (node.type === "text") {
-            lines.push(node.text || "");
-        }
-        else if (node.type === "hardBreak") {
+
+function extractTextFromADF(adf: unknown): string {
+    if (!adf) return "";
+    if (typeof adf === "string") return adf;
+    const lines: string[] = [];
+    function walk(node: unknown): void {
+        if (!node || typeof node !== "object") return;
+        const n = node as { type?: string; text?: string; content?: unknown[] };
+        if (n.type === "text") {
+            lines.push(n.text || "");
+        } else if (n.type === "hardBreak") {
             lines.push("\n");
-        }
-        else if (node.content) {
-            node.content.forEach(walk);
-            if (["paragraph", "heading", "listItem", "bulletList"].includes(node.type)) {
+        } else if (n.content) {
+            n.content.forEach(walk);
+            if (["paragraph", "heading", "listItem", "bulletList"].includes(n.type as string)) {
                 lines.push("\n");
             }
         }
@@ -54,26 +77,40 @@ function extractTextFromADF(adf) {
     walk(adf);
     return lines.join("").trim();
 }
-export async function generateCommand(ticketId, options) {
+
+interface GenerateOptions {
+    framework?: string;
+    output: string;
+    dryRun?: boolean;
+}
+
+export async function generateCommand(
+    ticketId: string,
+    options: GenerateOptions
+): Promise<void> {
     const config = loadConfig();
     if (!config) {
-        console.error(chalk.red("✗ TicketToTest is not configured. Run first: ") +
-            chalk.bold("npx tickettotest init"));
+        console.error(
+            chalk.red("✗ TicketToTest is not configured. Run first: ") +
+            chalk.bold("npx tickettotest init")
+        );
         process.exit(1);
     }
     console.log(chalk.gray(`  Ticket: ${chalk.bold(ticketId)}\n`));
-    // 1. Fetch Jira ticket
     const jiraSpinner = ora(`Fetching ticket ${ticketId} from Jira...`).start();
-    let ticket;
+    let ticket: JiraTicket;
     try {
-        ticket = await fetchJiraTicket(ticketId, config.jira_url, config.jira_email, config.jira_token);
+        ticket = await fetchJiraTicket(
+            ticketId,
+            config.jira_url as string,
+            config.jira_email as string,
+            config.jira_token as string
+        );
         jiraSpinner.succeed(chalk.green(`Ticket fetched: "${ticket.title}"`));
-    }
-    catch (err) {
-        jiraSpinner.fail(chalk.red(`Jira fetch failed: ${err.message}`));
+    } catch (err) {
+        jiraSpinner.fail(chalk.red(`Jira fetch failed: ${(err as Error).message}`));
         process.exit(1);
     }
-    // 2. Generate test via TicketToTest API
     const framework = options.framework || "playwright";
     const genSpinner = ora(`Claude AI is generating your ${framework} test...`).start();
     try {
@@ -81,7 +118,7 @@ export async function generateCommand(ticketId, options) {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "x-license-key": config.license_key,
+                "x-license-key": config.license_key as string,
             },
             body: JSON.stringify({
                 ticket_id: ticket.id,
@@ -91,14 +128,12 @@ export async function generateCommand(ticketId, options) {
                 project_path: options.output,
             }),
         });
-        const data = await res.json();
+        const data = (await res.json()) as GenerateResponse;
         if (!res.ok) {
             genSpinner.fail(chalk.red(`Generation failed: ${data.error}`));
-            if (data.message)
-                console.log(chalk.yellow(`  → ${data.message}`));
+            if (data.message) console.log(chalk.yellow(`  → ${data.message}`));
             process.exit(1);
         }
-        // Clean code — remove markdown fences if present
         const code = data.code
             .replace(/^```typescript\n?/, "")
             .replace(/^```ts\n?/, "")
@@ -106,21 +141,17 @@ export async function generateCommand(ticketId, options) {
             .trim();
         const lineCount = code.split("\n").length;
         genSpinner.succeed(chalk.green(`Test generated! (${lineCount} lines)`));
-        // 3a. --dry-run: print to console
         if (options.dryRun) {
             console.log(chalk.gray("\n─────────────────────────────────────────"));
             console.log(code);
             console.log(chalk.gray("─────────────────────────────────────────\n"));
-        }
-        else {
-            // 3b. Save to file
+        } else {
             if (!existsSync(options.output)) {
                 mkdirSync(options.output, { recursive: true });
             }
             const filepath = join(options.output, data.filename);
             writeFileSync(filepath, code, "utf-8");
             console.log(chalk.green(`\n✓ Saved: ${chalk.bold(filepath)}`));
-            // 4. Show duplicate warnings if any
             if (data.existing_tests_warning && data.existing_tests_warning.length > 0) {
                 console.log(chalk.yellow(`\n⚠ Possible duplicate tests detected:`));
                 for (const warning of data.existing_tests_warning) {
@@ -128,24 +159,27 @@ export async function generateCommand(ticketId, options) {
                 }
                 console.log(chalk.gray(`  Review your existing tests before running.\n`));
             }
-            const runCmd = framework === "robot" ? "robot tests/"
+            const runCmd =
+                framework === "robot" ? "robot tests/"
                 : framework === "cypress" ? "npx cypress run"
                 : framework === "selenium" ? "mvn test"
                 : "npx playwright test";
-            console.log(chalk.cyan("\nRun your test:\n") +
-                chalk.bold(`  ${runCmd} ${filepath}\n`));
+            console.log(
+                chalk.cyan("\nRun your test:\n") +
+                chalk.bold(`  ${runCmd} ${filepath}\n`)
+            );
         }
-        // 4. Show remaining quota
         const remaining = data.quota_remaining;
         const color = remaining < 20 ? chalk.yellow : chalk.gray;
         console.log(color(`  Generations remaining: ${remaining}`));
         if (remaining < 20) {
-            console.log(chalk.yellow("  ⚠ Running low on credits!\n") +
-                chalk.cyan("  Buy more at: tickettotest.com\n"));
+            console.log(
+                chalk.yellow("  ⚠ Running low on credits!\n") +
+                chalk.cyan("  Buy more at: tickettotest.com\n")
+            );
         }
-    }
-    catch (err) {
-        genSpinner.fail(chalk.red(`API connection failed: ${err.message}`));
+    } catch (err) {
+        genSpinner.fail(chalk.red(`API connection failed: ${(err as Error).message}`));
         process.exit(1);
     }
 }

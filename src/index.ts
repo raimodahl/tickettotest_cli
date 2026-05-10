@@ -3,7 +3,7 @@ import { program } from "commander";
 import { initCommand } from "./commands/init.js";
 import { generateCommand } from "./commands/generate.js";
 import { quotaCommand } from "./commands/quota.js";
-import { coverageCommand } from "./commands/coverage.js";
+import { coverageCommand, qualityCommand } from "./commands/coverage.js";
 import chalk from "chalk";
 console.log(chalk.bold.blue(`\n  ⚡ TicketToTest`) +
     chalk.gray(` v0.1.8 — Jira → Test generator\n`));
@@ -31,6 +31,7 @@ program
     .description("Show test coverage summary or check ticket coverage")
     .option("-p, --project <path>", "Project root to scan for tests", ".")
     .option("-o, --output <dir>", "Alias for --project")
+    .option("-r, --report", "Generate markdown report to tests/coverage-report.md")
     .argument("[ticket-ids...]", "Jira ticket IDs to check (optional)")
     .action(coverageCommand);
 program.parse();

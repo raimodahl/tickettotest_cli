@@ -82,6 +82,7 @@ interface GenerateOptions {
     framework?: string;
     output: string;
     dryRun?: boolean;
+    apiKey?: string;
 }
 
 export async function generateCommand(
@@ -89,7 +90,8 @@ export async function generateCommand(
     options: GenerateOptions
 ): Promise<void> {
     const config = loadConfig();
-    if (!config) {
+    const licenseKey = options.apiKey ?? config?.license_key;
+    if (!licenseKey) {
         console.error(
             chalk.red("✗ TicketToTest is not configured. Run first: ") +
             chalk.bold("npx tickettotest init")
@@ -118,7 +120,7 @@ export async function generateCommand(
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "x-license-key": config.license_key as string,
+                "x-license-key": licenseKey as string,
             },
             body: JSON.stringify({
                 ticket_id: ticket.id,

@@ -21,6 +21,7 @@ program
     .option("-o, --output <dir>", "Directory to save the generated test", "./tests")
     .option("-f, --framework <framework>", "Test framework: playwright|robot|cypress|selenium", "playwright")
     .option("--dry-run", "Print the generated test without saving")
+    .option("--api-key <key>", "License key (overrides config.json if set)")
     .action(generateCommand);
 program
     .command("quota")

@@ -83,6 +83,7 @@ interface GenerateOptions {
     output: string;
     dryRun?: boolean;
     apiKey?: string;
+    url?: string;
 }
 
 export async function generateCommand(
@@ -113,6 +114,36 @@ export async function generateCommand(
         jiraSpinner.fail(chalk.red(`Jira fetch failed: ${(err as Error).message}`));
         process.exit(1);
     }
+
+    // Fetch selectors from URL if --url was provided
+    let selectors: object[] = [];
+    if (options.url) {
+        const selectorSpinner = ora(`Fetching selectors from ${options.url}...`).start();
+        try {
+            const res = await fetch(`${config.api_url}/selector-intel`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-license-key": licenseKey as string,
+                },
+                body: JSON.stringify({
+                    url: options.url,
+                    license_key: licenseKey,
+                }),
+            });
+            const data = await res.json() as { selectors?: object[]; error?: string };
+            if (!res.ok || data.error) {
+                selectorSpinner.fail(chalk.red(`Selector intel failed: ${data.error || res.status}`));
+                process.exit(1);
+            }
+            selectors = data.selectors || [];
+            selectorSpinner.succeed(chalk.green(`Found ${selectors.length} selectors`));
+        } catch (err) {
+            selectorSpinner.fail(chalk.red(`Selector intel error: ${(err as Error).message}`));
+            process.exit(1);
+        }
+    }
+
     const framework = options.framework || "playwright";
     const genSpinner = ora(`Claude AI is generating your ${framework} test...`).start();
     try {
@@ -128,6 +159,7 @@ export async function generateCommand(
                 description: ticket.description,
                 framework,
                 project_path: options.output,
+                ...(selectors.length > 0 && { selectors }),
             }),
         });
         const data = (await res.json()) as GenerateResponse;

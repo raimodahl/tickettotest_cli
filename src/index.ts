@@ -6,22 +6,23 @@ import { quotaCommand } from "./commands/quota.js";
 import { coverageCommand, qualityCommand } from "./commands/coverage.js";
 import chalk from "chalk";
 console.log(chalk.bold.blue(`\n  ⚡ TicketToTest`) +
-    chalk.gray(` v0.1.8 — Jira → Test generator\n`));
+    chalk.gray(` v0.1.9 — Jira → Test generator\n`));
 program
     .name("tickettotest")
     .description("Generate test cases automatically from Jira tickets")
-    .version("0.1.8");
+    .version("0.1.9");
 program
     .command("init")
     .description("Configure TicketToTest — enter your license key and Jira credentials")
     .action(initCommand);
 program
     .command("generate <ticket-id>")
-    .description("Generate a test from a Jira ticket (playwright|robot|cypress|selenium)")
+    .description("Generate a test from a Jira ticket (playwright|robot|cypress|selenium|gatling|appium)")
     .option("-o, --output <dir>", "Directory to save the generated test", "./tests")
-    .option("-f, --framework <framework>", "Test framework: playwright|robot|cypress|selenium|gatling", "playwright")
+    .option("-f, --framework <framework>", "Test framework: playwright|robot|cypress|selenium|gatling|appium", "playwright")
     .option("--dry-run", "Print the generated test without saving")
     .option("--api-key <key>", "License key (overrides config.json if set)")
+    .option("--url <url>", "Fetch selectors from a URL using selector-intel (optional)")
     .action(generateCommand);
 program
     .command("quota")

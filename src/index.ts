@@ -19,7 +19,7 @@ program
     .command("generate <ticket-id>")
     .description("Generate a test from a Jira ticket (playwright|robot|cypress|selenium)")
     .option("-o, --output <dir>", "Directory to save the generated test", "./tests")
-    .option("-f, --framework <framework>", "Test framework: playwright|robot|cypress|selenium", "playwright")
+    .option("-f, --framework <framework>", "Test framework: playwright|robot|cypress|selenium|gatling", "playwright")
     .option("--dry-run", "Print the generated test without saving")
     .option("--api-key <key>", "License key (overrides config.json if set)")
     .action(generateCommand);

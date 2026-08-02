@@ -139,6 +139,11 @@ export async function generateCommand(
         const code = data.code
             .replace(/^```typescript\n?/, "")
             .replace(/^```ts\n?/, "")
+            .replace(/^```scala\n?/, "")
+            .replace(/^```java\n?/, "")
+            .replace(/^```python\n?/, "")
+            .replace(/^```javascript\n?/, "")
+            .replace(/^```robot\n?/, "")
             .replace(/```$/, "")
             .trim();
         const lineCount = code.split("\n").length;
@@ -168,6 +173,7 @@ export async function generateCommand(
                 framework === "robot" ? "robot tests/"
                 : framework === "cypress" ? "npx cypress run"
                 : framework === "selenium" ? "mvn test"
+                : framework === "gatling" ? "sbt Gatling/test"
                 : "npx playwright test";
             console.log(
                 chalk.cyan("\nRun your test:\n") +

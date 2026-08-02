@@ -147,6 +147,8 @@ export async function generateCommand(
             console.log(chalk.gray("\n─────────────────────────────────────────"));
             console.log(code);
             console.log(chalk.gray("─────────────────────────────────────────\n"));
+            console.log(chalk.yellow("  ⚠ Dry-run: testiä EI tallennettu levylle"));
+            console.log(chalk.yellow("  ⚠ Kiintiötä kului "));
         } else {
             if (!existsSync(options.output)) {
                 mkdirSync(options.output, { recursive: true });

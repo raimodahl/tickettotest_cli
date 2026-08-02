@@ -143,12 +143,13 @@ export async function generateCommand(
             .trim();
         const lineCount = code.split("\n").length;
         genSpinner.succeed(chalk.green(`Test generated! (${lineCount} lines)`));
+        const remaining = data.quota_remaining;
         if (options.dryRun) {
             console.log(chalk.gray("\n─────────────────────────────────────────"));
             console.log(code);
             console.log(chalk.gray("─────────────────────────────────────────\n"));
             console.log(chalk.yellow("  ⚠ Dry-run: testiä EI tallennettu levylle"));
-            console.log(chalk.yellow("  ⚠ Kiintiötä kului "));
+            console.log(chalk.yellow(`  ⚠ Kiintiötä kului 1 (jäljellä: ${remaining})`));
         } else {
             if (!existsSync(options.output)) {
                 mkdirSync(options.output, { recursive: true });
@@ -173,7 +174,6 @@ export async function generateCommand(
                 chalk.bold(`  ${runCmd} ${filepath}\n`)
             );
         }
-        const remaining = data.quota_remaining;
         const color = remaining < 20 ? chalk.yellow : chalk.gray;
         console.log(color(`  Generations remaining: ${remaining}`));
         if (remaining < 20) {
